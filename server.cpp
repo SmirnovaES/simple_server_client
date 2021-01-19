@@ -16,7 +16,7 @@ void writeToFile(char * buffer, int sd)
 
 int main()
 {
-    std::vector<int> client_socket;
+    std::vector<std::pair<int, int>> client_socket;
 
     int master_socket;
     if((master_socket = socket(AF_INET , SOCK_STREAM , 0)) < 0)
@@ -53,11 +53,11 @@ int main()
         FD_SET(master_socket, &readfds);
         int max_sd = master_socket;
 
-        for (int client : client_socket)
+        for (auto client : client_socket)
         {
-            FD_SET(client, &readfds);
-            if(client > max_sd)
-                max_sd = client;
+            FD_SET(client.first, &readfds);
+            if(client.first > max_sd)
+                max_sd = client.first;
         }
 
         int activity = select( max_sd + 1 , &readfds , NULL , NULL , NULL);
@@ -77,8 +77,9 @@ int main()
 
             if (client_socket.size() < MAX_CLIENTS)
             {
-                client_socket.push_back(new_socket);
-                std::cout << "New connection, client id: " << client_socket.size() - 1 << ", socket fd: " << new_socket << std::endl;
+                static int client_id = 0;
+                client_socket.push_back({new_socket, client_id++});
+                std::cout << "New connection, client id: " << client_id - 1 << ", socket fd: " << new_socket << std::endl;
                 static const std::string connection_accepted = "Connection accepted\n";
                 send(new_socket, connection_accepted.c_str(), connection_accepted.size(), 0);
             }
@@ -92,21 +93,22 @@ int main()
 
         for (int i = 0; i < client_socket.size(); ++i)
         {
-            if (FD_ISSET(client_socket[i], &readfds))
+            int sd = client_socket[i].first;
+            if (FD_ISSET(sd, &readfds))
             {
                 char buffer[BUF_SIZE + 1];
                 int valread;
-                if ((valread = read(client_socket[i], buffer, BUF_SIZE)) == 0)
+                if ((valread = read(sd, buffer, BUF_SIZE)) == 0)
                 {
-                    std::cout << "Client disconnected, socket fd: " << client_socket[i] << std::endl;
+                    std::cout << "Client disconnected, id: " << client_socket[i].second << ", socket fd: " << sd << std::endl;
 
-                    close(client_socket[i]);
+                    close(sd);
                     client_socket.erase(client_socket.begin() + i);
                 }
                 else
                 {
                     buffer[valread] = '\0';
-                    writeToFile(buffer, i);
+                    writeToFile(buffer, client_socket[i].second);
                 }
             }
         }
